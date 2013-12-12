@@ -1,0 +1,120 @@
+#!ipxe
+## https://gist.github.com/robinsmidsrod/2234639
+ 
+# Variables are specified in boot.ipxe.cfg
+ 
+# Some menu defaults
+set menu-timeout 5000
+set submenu-timeout ${menu-timeout}
+isset ${menu-default} || set menu-default exit
+ 
+# Figure out if client is 64-bit capable
+cpuid --ext 29 && set arch x64 || set arch x86
+cpuid --ext 29 && set archl amd64 || set archl i386
+ 
+###################### MAIN MENU ####################################
+ 
+:start
+menu iPXE boot menu for ${initiator-iqn}
+item --gap --             ------------------------- Operating systems ------------------------------
+item --key U ubuntu-netboot Boot Ubuntu from Internet
+item --key u ubuntu-local Boot Ubuntu from PXE Server
+item --key d dos          FreeDOS
+item --key b dell         Dell
+item --gap --             ------------------------- Tools and utilities ----------------------------
+item --key p pxelinux     Load PXELinux menu
+item --key r menu-recovery Recovery tools...
+item --key d menu-diag    Diagnostics tools...
+item --key i menu-install Installers...
+item --gap --             ------------------------- Advanced options -------------------------------
+item --key c config       Configure settings
+item shell                Drop to iPXE shell
+item reboot               Reboot computer
+item
+item --key x exit         Exit iPXE and continue BIOS boot
+choose --timeout ${menu-timeout} --default ${menu-default} selected || goto cancel
+set menu-timeout 0
+goto ${selected}
+:cancel
+echo You cancelled the menu, dropping you to a shell
+ 
+:shell
+echo Type 'exit' to get the back to the menu
+shell
+set menu-timeout 0
+set submenu-timeout 0
+goto start
+
+:failed
+echo Booting failed, dropping to shell
+goto shell
+ 
+:reboot
+reboot
+ 
+:exit
+exit
+
+:config
+config
+goto start
+ 
+:back
+set submenu-timeout 0
+clear submenu-default
+goto start
+
+
+
+#:ubuntu
+#set path 13-10/casper/
+#set vmlinuz vmlinuz.efi
+#set initrd initrd.lz
+#kernel ${path}/${vmlinuz} boot=live config fetch=http://10.42.0.1:8000/${path}/filesystem.squashfs root=/dev/rd/0 rw  --
+#initrd ${path}/${initrd}
+#boot
+
+#sanboot ubuntu/ubuntu-13.10-desktop-amd64.iso
+
+#mtd_blkdevs.ko  mtdblock.ko  phram.ko
+
+set url http://10.42.0.1:8000/
+:dell
+set path dell/casper/
+set vmlinuz vmlinuz
+set initrd initrd.lz
+set iso dell-bto-precise-superior-X04-iso-20131209-0.iso
+set fish fish.tar.gz
+
+kernel ${path}/${vmlinuz} root=/dev/rd/0 rw boot=casper automatic-ubiquity prompt fetch={$url}/${iso} fish={$url}/${fish}
+initrd ${path}/${initrd}
+
+initrd bin/tar /bin/tar mode=755
+initrd bin/gzip /bin/gzip mode=755
+initrd bin/gunzip /bin/gunzip mode=755
+initrd iso_mount.sh /scripts/casper-premount/20iso_scan mode=755
+boot
+
+:ubuntu-local
+set path 13-04/casper/
+set vmlinuz vmlinuz.efi
+set initrd initrd.lz
+set iso ubuntu/ubuntu-13.04-desktop-amd64.iso
+kernel ${path}/${vmlinuz} boot=casper config root=/dev/rd/0 rw  --
+initrd ${path}/${initrd}
+initrd iso_mount.sh /scripts/casper-premount/20iso_scan mode=755
+initrd http://10.42.0.1:8000/${iso} /ubuntu.iso
+boot
+
+:ubuntu-netboot
+echo Starting Ubuntu x64 installer for ${hostname}
+set base-url http://archive.ubuntu.com/ubuntu/dists/saucy/main/installer-amd64/current/images/netboot/ubuntu-installer/amd64
+kernel ${base-url}/linux
+initrd ${base-url}/initrd.gz
+#imgargs linux auto=true url=http://yourserver/some/path/preseed.cfg
+boot || 
+
+# If everything failed, give the user some options
+echo Boot from ${base-url} failed
+prompt --key 0x197e --timeout 2000 Press F12 to investigate || exit
+shell
